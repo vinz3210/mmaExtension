@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Map Making App — Layout & Smooth Zoom
 // @namespace    customMMAScript
-// @version      1.2.0
+// @version      1.2.1
 // @description  Layout toggle, smooth zoom, and a configurable shortcut to pin and save the visible panorama.
 // @match        https://map-making.app/maps/*
 // @run-at       document-start
@@ -71,8 +71,8 @@
     if (button) {
       button.textContent = `${settings.saveAfterPin ? 'Pin + Save' : 'Pin'} (${hotkey.label})`;
       button.title = settings.saveAfterPin
-        ? 'Sichtbares Panorama per ID fixieren und den Ort speichern. Shortcut im Tampermonkey-Menü ändern.'
-        : 'Sichtbares Panorama per ID fixieren und geöffnet lassen. Später den Ort manuell speichern.';
+        ? 'Pin the visible panorama by ID and save the location. Change the shortcut in the Tampermonkey menu.'
+        : 'Pin the visible panorama by ID and keep it open. Save the location manually when ready.';
       button.disabled = pinning;
     }
   }
@@ -300,23 +300,23 @@
     toolbar = document.createElement('div');
     toolbar.id = 'mma-tools';
     toolbar.setAttribute('role', 'group');
-    toolbar.setAttribute('aria-label', 'Map Making Zusatzfunktionen');
+    toolbar.setAttribute('aria-label', 'Map Making extra controls');
     toolbar.innerHTML = `
-      <label title="Karte links 1/3, Panorama rechts 2/3. Aus: 50:50. Ab 801 px Fensterbreite.">
-        <input type="checkbox" data-setting="wide"> ⅓ Karte / ⅔ Pano
+      <label title="Map on the left: 1/3. Panorama on the right: 2/3. Off: 50:50. Applies at window widths of 801 px and above.">
+        <input type="checkbox" data-setting="wide"> ⅓ Map / ⅔ Pano
       </label>
-      <label title="Feiner, animierter Zoom mit Mausrad und den Panorama-Zoom-Buttons.">
-        <input type="checkbox" data-setting="smooth"> Feiner Zoom
+      <label title="Fine, animated zoom using the mouse wheel and panorama zoom buttons.">
+        <input type="checkbox" data-setting="smooth"> Fine zoom
       </label>
-      <label title="Aus: nur die sichtbare Panorama-ID fixieren und das Panorama geöffnet lassen. An: anschließend den Ort speichern.">
+      <label title="Off: pin only the visible panorama ID and keep the panorama open. On: save the location after pinning.">
         <input type="checkbox" data-setting="saveAfterPin"> Save after pin
       </label>
-      <label title="Zoom-Schritt pro Mausrad-Raste. Kleiner = feiner.">Tempo
-        <select aria-label="Panorama Zoom-Geschwindigkeit">
-          <option value="0.05">Sehr fein</option>
-          <option value="0.1">Fein</option>
-          <option value="0.2">Mittel</option>
-          <option value="0.35">Schnell</option>
+      <label title="Zoom step per mouse-wheel tick. Smaller means finer.">Speed
+        <select aria-label="Panorama zoom speed">
+          <option value="0.05">Very fine</option>
+          <option value="0.1">Fine</option>
+          <option value="0.2">Medium</option>
+          <option value="0.35">Fast</option>
         </select>
       </label>
       <button type="button" data-action="pin"></button>`;
