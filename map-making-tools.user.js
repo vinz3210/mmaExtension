@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Map Making App — Layout & Smooth Zoom
 // @namespace    customMMAScript
-// @version      1.2.1
-// @description  Layout toggle, smooth zoom, and a configurable shortcut to pin and save the visible panorama.
+// @version      1.3.0
+// @description  Layout toggle, smooth zoom, panorama pinning, and V to hide panorama UI.
 // @match        https://map-making.app/maps/*
 // @run-at       document-start
 // @grant        unsafeWindow
@@ -47,6 +47,15 @@
     return combo;
   }
   let hotkey = parseHotkey(typeof GM_getValue === 'function' ? GM_getValue(HOTKEY_KEY, 'P') : 'P') || parseHotkey('P');
+  // Reserve plain V for panorama UI, including installations that previously bound pin to V.
+  if (hotkey.label === 'V') {
+    hotkey = parseHotkey('P');
+    if (typeof GM_setValue === 'function') GM_setValue(HOTKEY_KEY, 'P');
+  }
+  let panoramaUIHidden = false;
+  let observedEmbed;
+  let overlayObserver;
+  let overlayFrame = 0;
   let pinning = false;
   let notice;
   let noticeTimer;
@@ -77,13 +86,75 @@
     }
   }
 
+  function updateUIButton() {
+    const button = toolbar?.querySelector('[data-action="ui"]');
+    if (button) {
+      button.textContent = `${panoramaUIHidden ? 'Show' : 'Hide'} pano UI (V)`;
+      button.setAttribute('aria-pressed', String(panoramaUIHidden));
+    }
+  }
+
+  function markPanoramaOverlays(embed) {
+    // Keep the image canvas and its ancestor path visible. Every sibling on that
+    // path is an overlay, including Google's navigation canvas and the app controls.
+    const canvas = embed.querySelector('.widget-scene > canvas.widget-scene-canvas');
+    if (!canvas) return;
+    embed.querySelectorAll('.mma-pano-overlay').forEach(element => element.classList.remove('mma-pano-overlay'));
+    let imageBranch = canvas;
+    while (imageBranch && imageBranch !== embed) {
+      const parent = imageBranch.parentElement;
+      if (!parent) break;
+      for (const sibling of parent.children) {
+        if (sibling !== imageBranch && !['STYLE', 'SCRIPT'].includes(sibling.tagName)) {
+          sibling.classList.add('mma-pano-overlay');
+        }
+      }
+      imageBranch = parent;
+    }
+  }
+
+  function syncPanoramaUI() {
+    const embed = document.querySelector('.location-preview__embed');
+    if (embed !== observedEmbed || !panoramaUIHidden) {
+      overlayObserver?.disconnect();
+      overlayObserver = null;
+      if (overlayFrame) cancelAnimationFrame(overlayFrame);
+      overlayFrame = 0;
+      if (observedEmbed) {
+        observedEmbed.classList.remove('mma-pano-ui-hidden');
+        observedEmbed.querySelectorAll('.mma-pano-overlay').forEach(element => element.classList.remove('mma-pano-overlay'));
+      }
+      observedEmbed = embed;
+    }
+    if (!embed) return;
+    embed.classList.toggle('mma-pano-ui-hidden', panoramaUIHidden);
+    if (!panoramaUIHidden) return;
+    markPanoramaOverlays(embed);
+    if (!overlayObserver) {
+      overlayObserver = new MutationObserver(() => {
+        if (!overlayFrame) overlayFrame = requestAnimationFrame(() => {
+          overlayFrame = 0;
+          if (panoramaUIHidden && embed.isConnected) markPanoramaOverlays(embed);
+        });
+      });
+      overlayObserver.observe(embed, { childList: true, subtree: true });
+    }
+  }
+
+  function togglePanoramaUI() {
+    if (!document.querySelector('.location-preview__embed .widget-scene')) return;
+    panoramaUIHidden = !panoramaUIHidden;
+    syncPanoramaUI();
+    updateUIButton();
+  }
+
   if (typeof GM_registerMenuCommand === 'function') {
     GM_registerMenuCommand('Set pin-and-save shortcut…', () => {
       const answer = window.prompt('Pin the visible panorama. The Save after pin toggle controls automatic saving.\nShortcut, e.g. P, J, Alt+P or Ctrl+Shift+P:', hotkey.label);
       if (answer === null) return;
       const next = parseHotkey(answer);
       if (!next) return window.alert('Use a letter, digit or F2–F12, optionally with Ctrl, Alt, Shift or Meta.');
-      const appKeys = ['F', 'R', 'N', 'X', '3', '4', 'Ctrl+F', 'Ctrl+V', 'Ctrl+S', 'Ctrl+A', 'Ctrl+Z', 'Ctrl+Y', 'Ctrl+K', 'Ctrl+H', 'Ctrl+C', 'Ctrl+D', 'Ctrl+Shift+C'];
+      const appKeys = ['F', 'R', 'N', 'X', 'V', '3', '4', 'Ctrl+F', 'Ctrl+V', 'Ctrl+S', 'Ctrl+A', 'Ctrl+Z', 'Ctrl+Y', 'Ctrl+K', 'Ctrl+H', 'Ctrl+C', 'Ctrl+D', 'Ctrl+Shift+C'];
       if (appKeys.includes(next.label)) return window.alert('That shortcut is already used by Map Making App. Please choose another.');
       hotkey = next;
       GM_setValue(HOTKEY_KEY, hotkey.label);
@@ -143,6 +214,13 @@
   window.addEventListener('keydown', event => {
     if (event.repeat || event.isComposing || event.defaultPrevented || !(event.target instanceof Element)) return;
     if (event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="dialog"], [role="menu"], [role="listbox"]')) return;
+    if (event.key.toLowerCase() === 'v' && !event.ctrlKey && !event.altKey && !event.shiftKey && !event.metaKey) {
+      if (!document.querySelector('.location-preview__embed .widget-scene')) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      togglePanoramaUI();
+      return;
+    }
     if (event.key.toLowerCase() !== hotkey.key || !!event.ctrlKey !== hotkey.ctrl ||
         !!event.altKey !== hotkey.alt || !!event.shiftKey !== hotkey.shift || !!event.metaKey !== hotkey.meta) return;
     if (!document.querySelector('.location-preview')) return;
@@ -266,6 +344,10 @@
       const style = document.createElement('style');
       style.id = 'mma-tools-style';
       style.textContent = `
+        .location-preview__embed.mma-pano-ui-hidden .mma-pano-overlay,
+        .location-preview__embed.mma-pano-ui-hidden .mma-pano-overlay * {
+          visibility: hidden !important; pointer-events: none !important;
+        }
         @media (min-width: 801px) {
           .mma-tools-wide .page-map-editor {
             grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) !important;
@@ -296,6 +378,7 @@
       toolbar?.remove();
       return;
     }
+    syncPanoramaUI();
     if (toolbar?.isConnected) return;
     toolbar = document.createElement('div');
     toolbar.id = 'mma-tools';
@@ -319,7 +402,8 @@
           <option value="0.35">Fast</option>
         </select>
       </label>
-      <button type="button" data-action="pin"></button>`;
+      <button type="button" data-action="pin"></button>
+      <button type="button" data-action="ui" title="Toggle all panorama overlays. Press V again to restore them."></button>`;
     for (const input of toolbar.querySelectorAll('input')) {
       input.checked = settings[input.dataset.setting];
       input.addEventListener('change', () => {
@@ -338,7 +422,9 @@
     });
     document.body.append(toolbar);
     toolbar.querySelector('[data-action="pin"]').addEventListener('click', () => { void pinVisiblePanorama(); });
+    toolbar.querySelector('[data-action="ui"]').addEventListener('click', togglePanoramaUI);
     updatePinButton();
+    updateUIButton();
     applyLayout();
   }
 

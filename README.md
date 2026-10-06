@@ -8,6 +8,7 @@ A Tampermonkey userscript that adds layout controls, smoother panorama zoom, and
 - Fine, animated panorama zoom with adjustable speed for the mouse wheel and +/− buttons.
 - Press **P** to pin the currently visible panorama by its exact ID instead of using **Default / auto-updating**.
 - Choose whether pinning also saves the location or leaves the panorama open for further editing.
+- Press **V** to hide all UI overlays inside the panorama, including controls, navigation arrows, and the crosshair. Press **V** again to restore them. The map and location editor stay visible.
 
 Controls appear at the bottom-right, and preferences are remembered. Change the pin shortcut through **Tampermonkey → Set pin-and-save shortcut…**. Saving a location still requires the usual **Save / Ctrl+S** to commit the map to the server.
 
